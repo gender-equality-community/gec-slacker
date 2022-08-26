@@ -2,6 +2,8 @@
 
 Take messages from an XSTREAM, and post to slack.
 
-For the first message of $period (we use 30 minutes for not overloading messages in whatsapp, for instance), create a new slack message. For every other message, edit that post and update it.
+For each unique recipient ID, create a new slack channel (if one doesn't exist), post the message to
+that channel (with a string at the end containing the derived sentiment).
 
-Maybe the end of a message needs to include the scores/ labels we find; that way we surface what the model derives.
+For new recipients, update a central announce channel. For updated messages, simply update a logs
+channel.
