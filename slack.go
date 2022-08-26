@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/slack-go/slack"
-	_ "github.com/slack-go/slack/slackevents"
+	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
 )
 
@@ -17,14 +19,22 @@ type slackClient interface {
 	PostMessage(string, ...slack.MsgOption) (string, string, error)
 	GetConversations(*slack.GetConversationsParameters) ([]slack.Channel, string, error)
 	CreateConversation(string, bool) (*slack.Channel, error)
+	JoinConversation(string) (*slack.Channel, string, []string, error)
+	GetConversationInfo(string, bool) (*slack.Channel, error)
+}
+
+type producer interface {
+	Produce(string, string) error
 }
 
 type Slack struct {
 	s     socketmodeClient
 	slack slackClient
+	p     producer
 }
 
-func NewSlack(slackAppToken, slackBotToken string) (b Slack, err error) {
+func NewSlack(slackAppToken, slackBotToken string, p producer) (b Slack, err error) {
+	b.p = p
 	b.slack = slack.New(slackBotToken,
 		slack.OptionAppLevelToken(slackAppToken),
 	)
@@ -45,8 +55,37 @@ func NewSlack(slackAppToken, slackBotToken string) (b Slack, err error) {
 // Do this by writing to an outgoing stream which the gec-bot
 // will pick up and respond with
 func (s Slack) events() {
-	s.s.Run()
-	for range s.s.(*socketmode.Client).Events {
+	go s.s.Run()
+	for evt := range s.s.(*socketmode.Client).Events {
+		switch evt.Type {
+		case socketmode.EventTypeEventsAPI:
+			eventsAPIEvent, _ := evt.Data.(slackevents.EventsAPIEvent)
+
+			switch eventsAPIEvent.Type {
+			case slackevents.CallbackEvent:
+				innerEvent := eventsAPIEvent.InnerEvent
+
+				switch ev := innerEvent.Data.(type) {
+				case *slackevents.MessageEvent:
+					if ev.BotID != "" {
+						continue
+					}
+
+					msg := ev.Text
+
+					channel, _ := s.chanName(ev.Channel)
+
+					err := s.p.Produce(channel, msg)
+					if err != nil {
+						fmt.Printf("%#v", err)
+					}
+				}
+			}
+
+			if evt.Request != nil {
+				s.s.Ack(*evt.Request)
+			}
+		}
 	}
 }
 
@@ -81,6 +120,17 @@ func (s Slack) Send(m Message) (err error) {
 	return
 }
 
+func (s Slack) chanName(id string) (name string, err error) {
+	c, err := s.slack.GetConversationInfo(id, false)
+	if err != nil {
+		return
+	}
+
+	name = c.Name
+
+	return
+}
+
 func (s Slack) chanID(user string) (id string, err error) {
 	channels, _, err := s.slack.GetConversations(&slack.GetConversationsParameters{Limit: 100})
 	if err != nil {
@@ -104,9 +154,7 @@ func (s Slack) newChannel(user string) (id string, err error) {
 
 	id = c.ID
 
-	if err != nil {
-		panic(err)
-	}
+	_, _, _, err = s.slack.JoinConversation(id)
 
 	return
 }

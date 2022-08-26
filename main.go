@@ -1,24 +1,26 @@
 package main
 
 import (
+	"log"
 	"os"
 )
 
 var (
 	redisAddr = os.Getenv("REDIS_ADDR")
-	stream    = os.Getenv("INCOMING_STREAM")
+	inStream  = os.Getenv("INCOMING_STREAM")
+	outStream = os.Getenv("OUTGOING_STREAM")
 
 	appToken = os.Getenv("APP_TOKEN")
 	botToken = os.Getenv("BOT_TOKEN")
 )
 
 func main() {
-	r, err := NewRedis(redisAddr, stream)
+	r, err := NewRedis(redisAddr, inStream, outStream)
 	if err != nil {
 		panic(err)
 	}
 
-	s, err := NewSlack(appToken, botToken)
+	s, err := NewSlack(appToken, botToken, r)
 	if err != nil {
 		panic(err)
 	}
@@ -32,6 +34,8 @@ func main() {
 	}()
 
 	for message := range m {
+		log.Printf("%#v", message)
+
 		err = s.Send(message)
 		if err != nil {
 			panic(err)

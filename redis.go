@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-redis/redis/v9"
 	"github.com/rs/xid"
@@ -18,13 +19,16 @@ var (
 )
 
 type Redis struct {
-	client *redis.Client
-	stream string
-	id     string
+	client    *redis.Client
+	inStream  string
+	outStream string
+	id        string
 }
 
-func NewRedis(addr, stream string) (r Redis, err error) {
-	r.stream = stream
+func NewRedis(addr, inStream, outStream string) (r Redis, err error) {
+	r.inStream = inStream
+	r.outStream = outStream
+
 	r.client = redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: "", // no password set
@@ -36,25 +40,26 @@ func NewRedis(addr, stream string) (r Redis, err error) {
 	return r, nil
 }
 
-func (r Redis) Process(c chan Message) error {
+func (r Redis) Process(c chan Message) (err error) {
 	ctx := context.Background()
 
-	err := r.client.XGroupCreate(ctx, r.stream, groupName, "$").Err()
+	err = r.client.XGroupCreate(ctx, r.inStream, groupName, "$").Err()
 	if err != nil && err.Error() != busyGroupErr {
 		return err
 	}
 
+	var entries []redis.XStream
 	for {
-		entries, err := r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+		entries, err = r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupName,
 			Consumer: r.id,
-			Streams:  []string{r.stream, ">"},
+			Streams:  []string{r.inStream, ">"},
 			Count:    1,
 			Block:    0,
 			NoAck:    false,
 		}).Result()
 		if err != nil {
-			return err
+			break
 		}
 
 		msg := entries[0].Messages[0].Values
@@ -66,5 +71,16 @@ func (r Redis) Process(c chan Message) error {
 		}
 	}
 
-	return nil
+	return
+}
+
+func (r Redis) Produce(id, msg string) (err error) {
+	return r.client.XAdd(context.Background(), &redis.XAddArgs{
+		Stream: r.outStream,
+		Values: map[string]interface{}{
+			"id":  id,
+			"ts":  time.Now().Unix(),
+			"msg": msg,
+		},
+	}).Err()
 }
