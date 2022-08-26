@@ -67,6 +67,13 @@ func (s Slack) events() {
 
 				switch ev := innerEvent.Data.(type) {
 				case *slackevents.MessageEvent:
+					// Don't forward anything in a thread; allow people to make
+					// comments instead
+					if ev.ThreadTimeStamp != "" {
+						continue
+					}
+
+					// Ignore anything from a bot
 					if ev.BotID != "" {
 						continue
 					}
