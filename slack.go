@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -9,6 +10,8 @@ import (
 )
 
 const gecChannel = "C03TUFXP6BG"
+
+var joinerMsgRe = regexp.MustCompile(`.+ has joined the channel`)
 
 type socketmodeClient interface {
 	Ack(socketmode.Request, ...interface{})
@@ -75,6 +78,11 @@ func (s Slack) events() {
 
 					// Ignore anything from a bot
 					if ev.BotID != "" {
+						continue
+					}
+
+					// Ignore messages where a user has joined a channel
+					if joinerMsgRe.Match([]byte(ev.Text)) {
 						continue
 					}
 
