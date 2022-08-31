@@ -35,6 +35,9 @@ func main() {
 
 	for message := range m {
 		log.Printf("%#v", message)
+		if message.Message == "" {
+			continue
+		}
 
 		err = s.Send(message)
 		if err != nil {
