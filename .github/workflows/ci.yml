@@ -70,6 +70,8 @@ jobs:
   build-and-push:
     needs: sonarcloud
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     #if: contains(github.ref, 'refs/tags')
     steps:
     - uses: actions/checkout@v3
