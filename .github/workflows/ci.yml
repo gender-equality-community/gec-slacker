@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '*'
+    tags:
+      - '*'
+  pull_request:
+    branches: [ main ]
+
+env:
+  GO_PRIVATE: "github.com/gender-equality-community/*"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-go@v2
+      with:
+        go-version: 1.19
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v -covermode=count -coverprofile=coverage.out ./...
+
+    - name: gosec
+      run: |
+        go install github.com/securego/gosec/v2/cmd/gosec@latest
+        gosec ./...
+
+    - name: golangci-lint
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.43.0
+        golangci-lint run --skip-files='.*_test.go'
+
+    - name: Archive code coverage
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage
+        path: |
+            coverage.out
+
+
+  sonarcloud:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        # Disabling shallow clone is recommended for improving relevancy of reporting
+        fetch-depth: 0
+
+    - name: Download a single artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: coverage
+
+    - name: SonarCloud Scan
+      uses: sonarsource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+
+  build-and-push:
+    needs: sonarcloud
+    runs-on: ubuntu-latest
+    #if: contains(github.ref, 'refs/tags')
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Generate SBOM
+      uses: CycloneDX/gh-gomod-generate-sbom@v1
+      with:
+        version: v1
+        args: mod -licenses -json -output bom.json
+
+    - name: Build and push containers
+      run: |
+        set -axe
+
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+        TAG=${GITHUB_REF##*/} make docker-build docker-push
+
+    - uses: sigstore/cosign-installer@main
+
+    - name: Sign container image
+      run: |
+        make .image
+        cosign sign --key env://COSIGN_PRIVATE_KEY $(cat .image)
+      env:
+        COSIGN_PRIVATE_KEY: ${{secrets.COSIGN_SIGNING_SECRET}}
+        COSIGN_PASSWORD: ${{secrets.COSIGN_PASSWORD}}
+
+    - name: Upload bom to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: bom.json
+        asset_name: bom.json
+        tag: ${{ github.ref }}
+        overwrite: true
+        body: "CycloneDX json output"

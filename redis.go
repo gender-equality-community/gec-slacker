@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/go-redis/redis/v9"
+	redis "github.com/go-redis/redis/v9"
+	"github.com/mitchellh/mapstructure"
 	"github.com/rs/xid"
 )
 
@@ -18,8 +20,14 @@ var (
 	busyGroupErr = "BUSYGROUP Consumer Group name already exists"
 )
 
+type redisClient interface {
+	XGroupCreate(context.Context, string, string, string) *redis.StatusCmd
+	XReadGroup(context.Context, *redis.XReadGroupArgs) *redis.XStreamSliceCmd
+	XAdd(context.Context, *redis.XAddArgs) *redis.StringCmd
+}
+
 type Redis struct {
-	client    *redis.Client
+	client    redisClient
 	inStream  string
 	outStream string
 	id        string
@@ -63,12 +71,15 @@ func (r Redis) Process(c chan Message) (err error) {
 		}
 
 		msg := entries[0].Messages[0].Values
+		m, err := redisToMessage(msg)
+		if err != nil {
+			// log messages, but don't stop the world
+			fmt.Printf("An error processing message: %#v", err)
 
-		c <- Message{
-			ID:      msg["id"].(string),
-			Ts:      msg["ts"].(string),
-			Message: msg["msg"].(string),
+			continue
 		}
+
+		c <- m
 	}
 
 	return
@@ -83,4 +94,10 @@ func (r Redis) Produce(id, msg string) (err error) {
 			"msg": msg,
 		},
 	}).Err()
+}
+
+func redisToMessage(msg map[string]interface{}) (m Message, err error) {
+	err = mapstructure.Decode(msg, &m)
+
+	return
 }

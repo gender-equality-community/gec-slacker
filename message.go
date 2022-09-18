@@ -1,7 +1,7 @@
 package main
 
 type Message struct {
-	ID      string
-	Ts      string
-	Message string
+	ID      string `mapstructure:"id"`
+	Ts      string `mapstructure:"ts"`
+	Message string `mapstructure:"msg"`
 }
