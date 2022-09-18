@@ -87,13 +87,12 @@ jobs:
         set -axe
 
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
-        TAG=${GITHUB_REF##*/} make docker-build docker-push
+        TAG=${GITHUB_REF##*/} make .image docker-build docker-push
 
     - uses: sigstore/cosign-installer@main
 
     - name: Sign container image
       run: |
-        make .image
         cosign sign --key env://COSIGN_PRIVATE_KEY $(cat .image)
       env:
         COSIGN_PRIVATE_KEY: ${{secrets.COSIGN_SIGNING_SECRET}}
