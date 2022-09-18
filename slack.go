@@ -26,18 +26,14 @@ type slackClient interface {
 	GetConversationInfo(string, bool) (*slack.Channel, error)
 }
 
-type producer interface {
-	Produce(string, string) error
-}
-
 type Slack struct {
 	s     socketmodeClient
 	slack slackClient
-	p     producer
+	p     *Redis
 }
 
-func NewSlack(slackAppToken, slackBotToken string, p producer) (b Slack, err error) {
-	b.p = p
+func NewSlack(slackAppToken, slackBotToken string, p Redis) (b Slack, err error) {
+	b.p = &p
 	b.slack = slack.New(slackBotToken,
 		slack.OptionAppLevelToken(slackAppToken),
 	)
@@ -54,54 +50,71 @@ func NewSlack(slackAppToken, slackBotToken string, p producer) (b Slack, err err
 // Given a channel we're in, for every message from a non-bot
 // we should enqueue the message back onto the user.
 //
-//
 // Do this by writing to an outgoing stream which the gec-bot
 // will pick up and respond with
 func (s Slack) events() {
+	var err error
+
 	go s.s.Run()
 	for evt := range s.s.(*socketmode.Client).Events {
-		switch evt.Type {
-		case socketmode.EventTypeEventsAPI:
-			eventsAPIEvent, _ := evt.Data.(slackevents.EventsAPIEvent)
-
-			switch eventsAPIEvent.Type {
-			case slackevents.CallbackEvent:
-				innerEvent := eventsAPIEvent.InnerEvent
-
-				switch ev := innerEvent.Data.(type) {
-				case *slackevents.MessageEvent:
-					// Don't forward anything in a thread; allow people to make
-					// comments instead
-					if ev.ThreadTimeStamp != "" {
-						continue
-					}
-
-					// Ignore anything from a bot
-					if ev.BotID != "" {
-						continue
-					}
-
-					// Ignore messages where a user has joined a channel
-					if joinerMsgRe.Match([]byte(ev.Text)) {
-						continue
-					}
-
-					msg := ev.Text
-
-					channel, _ := s.chanName(ev.Channel)
-
-					err := s.p.Produce(channel, msg)
-					if err != nil {
-						fmt.Printf("%#v", err)
-					}
-				}
-			}
-
-			if evt.Request != nil {
-				s.s.Ack(*evt.Request)
-			}
+		err = s.handleEvent(evt)
+		if err != nil {
+			fmt.Println(err)
 		}
 	}
+}
+
+func (s Slack) handleEvent(evt socketmode.Event) (err error) {
+	var (
+		channel, msg string //nolint:typecheck
+	)
+
+	switch evt.Type {
+	case socketmode.EventTypeEventsAPI:
+		eventsAPIEvent, _ := evt.Data.(slackevents.EventsAPIEvent)
+
+		switch eventsAPIEvent.Type {
+		case slackevents.CallbackEvent:
+			innerEvent := eventsAPIEvent.InnerEvent
+
+			switch ev := innerEvent.Data.(type) {
+			case *slackevents.MessageEvent:
+				// Don't forward anything in a thread; allow people to make
+				// comments instead
+				if ev.ThreadTimeStamp != "" {
+					return
+				}
+
+				// Ignore anything from a bot
+				if ev.BotID != "" {
+					return
+				}
+
+				// Ignore messages where a user has joined a channel
+				if joinerMsgRe.Match([]byte(ev.Text)) {
+					return
+				}
+
+				msg = ev.Text
+
+				channel, err = s.chanName(ev.Channel)
+				if err != nil {
+					return
+				}
+
+				err = s.p.Produce(channel, msg)
+				if err != nil {
+					return
+				}
+			}
+		}
+
+		if evt.Request != nil {
+			s.s.Ack(*evt.Request)
+		}
+	}
+
+	return
 }
 
 func (s Slack) Send(m Message) (err error) {
@@ -118,15 +131,19 @@ func (s Slack) Send(m Message) (err error) {
 		}
 
 		// Ignore failures to this for now
-		s.slack.PostMessage(gecChannel, slack.MsgOptionCompose(
+		_, _, err = s.slack.PostMessage(gecChannel, slack.MsgOptionCompose(
 			slack.MsgOptionText("New repsondent: #"+m.ID, false),
 			slack.MsgOptionParse(true)),
 		)
 	} else {
-		s.slack.PostMessage(gecChannel, slack.MsgOptionCompose(
+		_, _, err = s.slack.PostMessage(gecChannel, slack.MsgOptionCompose(
 			slack.MsgOptionText("Update from respondent: #"+m.ID, false),
 			slack.MsgOptionParse(true)),
 		)
+	}
+
+	if err != nil {
+		return
 	}
 
 	// send message to group

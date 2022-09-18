@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 )
 
@@ -33,15 +32,20 @@ func main() {
 		}
 	}()
 
+	panic(messageLoop(s, m))
+}
+
+func messageLoop(s Slack, m chan Message) (err error) {
 	for message := range m {
-		log.Printf("%#v", message)
 		if message.Message == "" {
 			continue
 		}
 
 		err = s.Send(message)
 		if err != nil {
-			panic(err)
+			break
 		}
 	}
+
+	return
 }

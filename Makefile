@@ -10,7 +10,10 @@ app: *.go go.mod go.sum
 
 .PHONY: docker-build docker-push
 docker-build:
-	docker build --build-arg logLevel=$(LOGLVL) -t $(IMG):$(TAG) .
+	docker build --label "tag=$(TAG)" --label "bom=https://github.com/gender-equality-community/gec-slacker/releases/download/$(TAG)/bom.json" --build-arg logLevel=$(LOGLVL) -t $(IMG):$(TAG) .
 
 docker-push:
 	docker push $(IMG):$(TAG)
+
+.image:
+	echo $(IMG):$(TAG) > $@
