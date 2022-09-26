@@ -65,10 +65,6 @@ func (s Slack) events() {
 }
 
 func (s Slack) handleEvent(evt socketmode.Event) (err error) {
-	var (
-		channel, msg string //nolint:typecheck
-	)
-
 	switch evt.Type {
 	case socketmode.EventTypeEventsAPI:
 		eventsAPIEvent, _ := evt.Data.(slackevents.EventsAPIEvent)
@@ -79,33 +75,7 @@ func (s Slack) handleEvent(evt socketmode.Event) (err error) {
 
 			switch ev := innerEvent.Data.(type) {
 			case *slackevents.MessageEvent:
-				// Don't forward anything in a thread; allow people to make
-				// comments instead
-				if ev.ThreadTimeStamp != "" {
-					return
-				}
-
-				// Ignore anything from a bot
-				if ev.BotID != "" {
-					return
-				}
-
-				// Ignore messages where a user has joined a channel
-				if joinerMsgRe.Match([]byte(ev.Text)) {
-					return
-				}
-
-				msg = ev.Text
-
-				channel, err = s.chanName(ev.Channel)
-				if err != nil {
-					return
-				}
-
-				err = s.p.Produce(channel, msg)
-				if err != nil {
-					return
-				}
+				return s.handleMessageEvent(ev)
 			}
 		}
 
@@ -115,6 +85,33 @@ func (s Slack) handleEvent(evt socketmode.Event) (err error) {
 	}
 
 	return
+}
+
+func (s Slack) handleMessageEvent(ev *slackevents.MessageEvent) (err error) {
+	// Don't forward anything in a thread; allow people to make
+	// comments instead
+	if ev.ThreadTimeStamp != "" {
+		return
+	}
+
+	// Ignore anything from a bot
+	if ev.BotID != "" {
+		return
+	}
+
+	// Ignore messages where a user has joined a channel
+	if joinerMsgRe.Match([]byte(ev.Text)) {
+		return
+	}
+
+	msg := ev.Text
+
+	channel, err := s.chanName(ev.Channel)
+	if err != nil {
+		return
+	}
+
+	return s.p.Produce(channel, msg)
 }
 
 func (s Slack) Send(m Message) (err error) {
