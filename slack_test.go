@@ -10,12 +10,15 @@ import (
 )
 
 type dummySlackSMClient struct {
-	error bool
+	wasAcked bool
+	error    bool
 }
 
-func (dummySlackSMClient) Ack(socketmode.Request, ...interface{}) {}
+func (d *dummySlackSMClient) Ack(socketmode.Request, ...interface{}) {
+	d.wasAcked = true
+}
 
-func (d dummySlackSMClient) Run() error {
+func (d *dummySlackSMClient) Run() error {
 	if d.error {
 		return fmt.Errorf("an error")
 	}
@@ -99,16 +102,17 @@ func TestSlack_handleEvent(t *testing.T) {
 		expectChanName string
 		expectMsg      string
 		expectError    bool
+		expectAck      bool
 	}{
-		{"not an EventTypeEventsAPI message", Slack{p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeConnected}, "", "", false},
-		{"not a CallbackEvent", Slack{s: dummySlackSMClient{}, p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.AppRateLimited}, Request: new(socketmode.Request)}, "", "", false},
-		{"not a MessageEvent", Slack{s: dummySlackSMClient{}, p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, Data: new(slackevents.LinkSharedEvent)}, Request: new(socketmode.Request)}, "", "", false},
-		{"message in a thread is skipped", Slack{s: dummySlackSMClient{}, p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{ThreadTimeStamp: "123456789"}}}, Request: new(socketmode.Request)}, "", "", false},
-		{"message from a bot is skipped", Slack{s: dummySlackSMClient{}, p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{BotID: "123456789"}}}, Request: new(socketmode.Request)}, "", "", false},
-		{"notification of a user joining is skipped", Slack{s: dummySlackSMClient{}, p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{Text: "so and so has joined the channel"}}}, Request: new(socketmode.Request)}, "", "", false},
-		{"failure to determine channel message is sent on bombs out", Slack{s: dummySlackSMClient{}, slack: &dummySlackClient{error: true}, p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{Text: "hello, world!"}}}, Request: new(socketmode.Request)}, "", "", true},
-		{"producer errors float up", Slack{s: dummySlackSMClient{}, slack: &dummySlackClient{}, p: &Redis{client: &dummyRedis{addError: true}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{Text: "hello, world!"}}}, Request: new(socketmode.Request)}, "", "", true},
-		{"slack messages correctly send to producer", Slack{s: dummySlackSMClient{}, slack: &dummySlackClient{}, p: &Redis{outStream: "test0", client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{Text: "hello, world!"}}}, Request: new(socketmode.Request)}, "test0", "hello, world!", false},
+		{"not an EventTypeEventsAPI message", Slack{s: new(dummySlackSMClient), p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeConnected}, "", "", false, false},
+		{"not a CallbackEvent", Slack{s: new(dummySlackSMClient), p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.AppRateLimited}, Request: new(socketmode.Request)}, "", "", false, true},
+		{"not a MessageEvent", Slack{s: new(dummySlackSMClient), p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, Data: new(slackevents.LinkSharedEvent)}, Request: new(socketmode.Request)}, "", "", false, true},
+		{"message in a thread is skipped", Slack{s: new(dummySlackSMClient), p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{ThreadTimeStamp: "123456789"}}}, Request: new(socketmode.Request)}, "", "", false, true},
+		{"message from a bot is skipped", Slack{s: new(dummySlackSMClient), p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{BotID: "123456789"}}}, Request: new(socketmode.Request)}, "", "", false, true},
+		{"notification of a user joining is skipped", Slack{s: new(dummySlackSMClient), p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{Text: "so and so has joined the channel"}}}, Request: new(socketmode.Request)}, "", "", false, true},
+		{"failure to determine channel message is sent on bombs out", Slack{s: new(dummySlackSMClient), slack: &dummySlackClient{error: true}, p: &Redis{client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{Text: "hello, world!"}}}, Request: new(socketmode.Request)}, "", "", true, false},
+		{"producer errors float up", Slack{s: new(dummySlackSMClient), slack: &dummySlackClient{}, p: &Redis{client: &dummyRedis{addError: true}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{Text: "hello, world!"}}}, Request: new(socketmode.Request)}, "", "", true, false},
+		{"slack messages correctly send to producer", Slack{s: new(dummySlackSMClient), slack: &dummySlackClient{}, p: &Redis{outStream: "test0", client: &dummyRedis{}}}, socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: slackevents.EventsAPIEvent{Type: slackevents.CallbackEvent, InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{Text: "hello, world!"}}}, Request: new(socketmode.Request)}, "test0", "hello, world!", false, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			err := test.s.handleEvent(test.evt)
@@ -138,6 +142,13 @@ func TestSlack_handleEvent(t *testing.T) {
 				}
 			})
 
+			t.Run("slack message was ack'd", func(t *testing.T) {
+				got := test.s.s.(*dummySlackSMClient).wasAcked
+
+				if test.expectAck != got {
+					t.Errorf("expected %v, received %v", test.expectAck, got)
+				}
+			})
 		})
 	}
 }
