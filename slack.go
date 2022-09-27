@@ -75,7 +75,10 @@ func (s Slack) handleEvent(evt socketmode.Event) (err error) {
 
 			switch ev := innerEvent.Data.(type) {
 			case *slackevents.MessageEvent:
-				return s.handleMessageEvent(ev)
+				err = s.handleMessageEvent(ev)
+				if err != nil {
+					return
+				}
 			}
 		}
 
