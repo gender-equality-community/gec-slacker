@@ -109,6 +109,12 @@ func (s Slack) handleMessageEvent(ev *slackevents.MessageEvent) (err error) {
 
 	msg := ev.Text
 
+	// skip messages where body is empty (such as when a message is
+	// deleted)
+	if msg == "" {
+		return
+	}
+
 	channel, err := s.chanName(ev.Channel)
 	if err != nil {
 		return
