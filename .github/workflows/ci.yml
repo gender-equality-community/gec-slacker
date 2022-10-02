@@ -12,6 +12,8 @@ on:
 env:
   GO_PRIVATE: "github.com/gender-equality-community/*"
 
+permissions: read-all
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -69,8 +71,11 @@ jobs:
 
   build-and-push:
     needs: sonarcloud
+    permissions:
+      packages: write
+      contents: write
+
     runs-on: ubuntu-latest
-    permissions: write-all
     if: contains(github.ref, 'refs/tags')
     steps:
     - uses: actions/checkout@v3
