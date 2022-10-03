@@ -3,7 +3,7 @@ module github.com/gender-equality-community/gec-slacker
 go 1.18
 
 require (
-	github.com/gender-equality-community/types v1.4.0
+	github.com/gender-equality-community/types v1.5.0
 	github.com/go-redis/redis/v9 v9.0.0-beta.2
 	github.com/rs/xid v1.4.0
 	github.com/slack-go/slack v0.11.3
