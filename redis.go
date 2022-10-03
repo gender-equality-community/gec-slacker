@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/gender-equality-community/types"
 	redis "github.com/go-redis/redis/v9"
-	"github.com/mitchellh/mapstructure"
 	"github.com/rs/xid"
 )
 
@@ -48,7 +47,7 @@ func NewRedis(addr, inStream, outStream string) (r Redis, err error) {
 	return r, nil
 }
 
-func (r Redis) Process(c chan Message) (err error) {
+func (r Redis) Process(c chan types.Message) (err error) {
 	ctx := context.Background()
 
 	err = r.client.XGroupCreate(ctx, r.inStream, groupName, "$").Err()
@@ -56,7 +55,11 @@ func (r Redis) Process(c chan Message) (err error) {
 		return err
 	}
 
-	var entries []redis.XStream
+	var (
+		entries []redis.XStream
+		msg     types.Message
+	)
+
 	for {
 		entries, err = r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupName,
@@ -70,8 +73,7 @@ func (r Redis) Process(c chan Message) (err error) {
 			break
 		}
 
-		msg := entries[0].Messages[0].Values
-		m, err := redisToMessage(msg)
+		msg, err = types.ParseMessage(entries[0].Messages[0].Values)
 		if err != nil {
 			// log messages, but don't stop the world
 			fmt.Printf("An error processing message: %#v", err)
@@ -79,7 +81,7 @@ func (r Redis) Process(c chan Message) (err error) {
 			continue
 		}
 
-		c <- m
+		c <- msg
 	}
 
 	return
@@ -88,16 +90,6 @@ func (r Redis) Process(c chan Message) (err error) {
 func (r Redis) Produce(id, msg string) (err error) {
 	return r.client.XAdd(context.Background(), &redis.XAddArgs{
 		Stream: r.outStream,
-		Values: map[string]interface{}{
-			"id":  id,
-			"ts":  time.Now().Unix(),
-			"msg": msg,
-		},
+		Values: types.NewMessage(types.SourceSlack, id, msg).Map(),
 	}).Err()
-}
-
-func redisToMessage(msg map[string]interface{}) (m Message, err error) {
-	err = mapstructure.Decode(msg, &m)
-
-	return
 }
