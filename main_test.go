@@ -3,23 +3,26 @@ package main
 import (
 	"testing"
 	"time"
+
+	"github.com/gender-equality-community/types"
 )
 
 func TestMessageLoop(t *testing.T) {
 	for _, test := range []struct {
 		name        string
-		input       Message
+		input       types.Message
 		slack       Slack
 		expectChan  string
 		expectError bool
 	}{
-		{"Empty messages are skipped", Message{}, Slack{slack: &dummySlackClient{}}, "", false},
-		{"Slack errors bubble up", Message{Message: "hi"}, Slack{slack: &dummySlackClient{error: true}}, "", true},
-		{"Valid messages from a known respondent are sent to slack", Message{Message: "hi", ID: "foo", Ts: "0"}, Slack{slack: &dummySlackClient{}, p: &Redis{client: &dummyRedis{}}}, "foo", false},
-		{"Valid messages from an unknown respondent are sent to slack", Message{Message: "hi", ID: "xxx", Ts: "0"}, Slack{slack: &dummySlackClient{}, p: &Redis{client: &dummyRedis{}}}, "foobar", false},
+		{"Empty messages are skipped", types.Message{}, Slack{slack: &dummySlackClient{}}, "", false},
+		{"Slack errors bubble up", types.Message{Message: "hi"}, Slack{slack: &dummySlackClient{error: true}}, "", true},
+		{"Valid messages from a known respondent are sent to slack", types.Message{Message: "hi", ID: "foo", Timestamp: 0}, Slack{slack: &dummySlackClient{}, p: &Redis{client: &dummyRedis{}}}, "foo", false},
+		{"Valid messages from an unknown respondent are sent to slack", types.Message{Message: "hi", ID: "xxx", Timestamp: 0}, Slack{slack: &dummySlackClient{}, p: &Redis{client: &dummyRedis{}}}, "foobar", false},
+		{"Valid autoresponses are prefixed with >", types.Message{Source: types.SourceAutoresponse, Message: "hi", ID: "xxx", Timestamp: 0}, Slack{slack: &dummySlackClient{}, p: &Redis{client: &dummyRedis{}}}, "foobar", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			m := make(chan Message)
+			m := make(chan types.Message)
 
 			go func() {
 				m <- test.input

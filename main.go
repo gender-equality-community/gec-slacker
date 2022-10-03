@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+
+	"github.com/gender-equality-community/types"
 )
 
 var (
@@ -11,6 +13,8 @@ var (
 
 	appToken = os.Getenv("APP_TOKEN")
 	botToken = os.Getenv("BOT_TOKEN")
+
+	m = make(chan types.Message)
 )
 
 func main() {
@@ -24,7 +28,6 @@ func main() {
 		panic(err)
 	}
 
-	m := make(chan Message)
 	go func() {
 		err := r.Process(m)
 		if err != nil {
@@ -35,7 +38,7 @@ func main() {
 	panic(messageLoop(s, m))
 }
 
-func messageLoop(s Slack, m chan Message) (err error) {
+func messageLoop(s Slack, m chan types.Message) (err error) {
 	for message := range m {
 		if message.Message == "" {
 			continue

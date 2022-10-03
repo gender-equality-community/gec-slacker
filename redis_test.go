@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gender-equality-community/types"
 	"github.com/go-redis/redis/v9"
 )
 
 var (
 	validMessage = map[string]interface{}{
 		"id":  "foo",
-		"ts":  "0",
+		"ts":  0,
 		"msg": "hi there",
 	}
 
@@ -97,7 +98,7 @@ func TestRedis_Process(t *testing.T) {
 	for _, test := range []struct {
 		name        string
 		r           redisClient
-		expect      *Message
+		expect      *types.Message
 		expectError bool
 	}{
 		{"Creating XGroup errors bubble up", &dummyRedis{createGroupError: true}, nil, true},
@@ -105,8 +106,8 @@ func TestRedis_Process(t *testing.T) {
 		{"Parse errors bubble up", &dummyRedis{readGroupError: true}, nil, true},
 		{"Messages with empty fields should be skipped", &dummyRedis{msg: emptyMessage}, nil, false},
 		{"Messages with unepected field types should error", &dummyRedis{msg: badDataTypes}, nil, true},
-		{"Valid messages, on a new XGroup, should succeed", &dummyRedis{msg: validMessage}, &Message{ID: "foo", Ts: "0", Message: "hi there"}, false},
-		{"Valid messages, on a existing XGroup, should succeed", &dummyRedis{msg: validMessage, busyError: true}, &Message{ID: "foo", Ts: "0", Message: "hi there"}, false},
+		{"Valid messages, on a new XGroup, should succeed", &dummyRedis{msg: validMessage}, &types.Message{ID: "foo", Timestamp: 0, Message: "hi there"}, false},
+		{"Valid messages, on a existing XGroup, should succeed", &dummyRedis{msg: validMessage, busyError: true}, &types.Message{ID: "foo", Timestamp: 0, Message: "hi there"}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := Redis{
@@ -116,7 +117,7 @@ func TestRedis_Process(t *testing.T) {
 				id:        "foo",
 			}
 
-			c := make(chan Message)
+			c := make(chan types.Message)
 
 			go func() {
 				err := r.Process(c)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/gender-equality-community/types"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
@@ -123,7 +124,7 @@ func (s Slack) handleMessageEvent(ev *slackevents.MessageEvent) (err error) {
 	return s.p.Produce(channel, msg)
 }
 
-func (s Slack) Send(m Message) (err error) {
+func (s Slack) Send(m types.Message) (err error) {
 	// get groups
 	id, err := s.chanID(m.ID)
 	if err != nil {
@@ -153,7 +154,10 @@ func (s Slack) Send(m Message) (err error) {
 	}
 
 	// send message to group
-	_, _, err = s.slack.PostMessage(id, slack.MsgOptionText(m.Message, false))
+	_, _, err = s.slack.PostMessage(id, slack.MsgOptionCompose(
+		slack.MsgOptionText(sourcedMessage(m.Source, m.Message), false),
+		slack.MsgOptionParse(true)),
+	)
 
 	return
 }
@@ -195,4 +199,12 @@ func (s Slack) newChannel(user string) (id string, err error) {
 	_, _, _, err = s.slack.JoinConversation(id)
 
 	return
+}
+
+func sourcedMessage(s types.Source, m string) string {
+	if s == types.SourceAutoresponse {
+		return fmt.Sprintf("> %s", m)
+	}
+
+	return m
 }
