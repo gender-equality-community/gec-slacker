@@ -22,9 +22,9 @@ type socketmodeClient interface {
 type slackClient interface {
 	PostMessage(string, ...slack.MsgOption) (string, string, error)
 	GetConversations(*slack.GetConversationsParameters) ([]slack.Channel, string, error)
-	CreateConversation(string, bool) (*slack.Channel, error)
+	CreateConversation(slack.CreateConversationParams) (*slack.Channel, error)
 	JoinConversation(string) (*slack.Channel, string, []string, error)
-	GetConversationInfo(string, bool) (*slack.Channel, error)
+	GetConversationInfo(*slack.GetConversationInfoInput) (*slack.Channel, error)
 }
 
 type Slack struct {
@@ -163,7 +163,9 @@ func (s Slack) Send(m types.Message) (err error) {
 }
 
 func (s Slack) chanName(id string) (name string, err error) {
-	c, err := s.slack.GetConversationInfo(id, false)
+	c, err := s.slack.GetConversationInfo(&slack.GetConversationInfoInput{
+		ChannelID: id,
+	})
 	if err != nil {
 		return
 	}
@@ -189,7 +191,10 @@ func (s Slack) chanID(user string) (id string, err error) {
 }
 
 func (s Slack) newChannel(user string) (id string, err error) {
-	c, err := s.slack.CreateConversation(user, false)
+	c, err := s.slack.CreateConversation(slack.CreateConversationParams{
+		ChannelName: user,
+		IsPrivate:   false,
+	})
 	if err != nil {
 		return
 	}
