@@ -17,3 +17,7 @@ docker-push:
 
 .image:
 	echo $(IMG):$(TAG) > $@
+
+test: coverage.out
+coverage.out: *.go go.mod go.sum
+	go test -v -covermode=count -coverprofile=$@ ./...
