@@ -59,7 +59,7 @@ func (d *dummySlackClient) GetConversations(*slack.GetConversationsParameters) (
 	}, "", nil
 }
 
-func (d *dummySlackClient) CreateConversation(string, bool) (*slack.Channel, error) {
+func (d *dummySlackClient) CreateConversation(slack.CreateConversationParams) (*slack.Channel, error) {
 	if d.error {
 		return nil, fmt.Errorf("an error")
 	}
@@ -82,9 +82,9 @@ func (d *dummySlackClient) JoinConversation(string) (*slack.Channel, string, []s
 	return nil, "", nil, nil
 }
 
-func (d *dummySlackClient) GetConversationInfo(string, bool) (*slack.Channel, error) {
+func (d *dummySlackClient) GetConversationInfo(*slack.GetConversationInfoInput) (*slack.Channel, error) {
 	// same signature and data, be a little lazy
-	return d.CreateConversation("", false)
+	return d.CreateConversation(slack.CreateConversationParams{})
 }
 
 func TestNewSlack(t *testing.T) {
